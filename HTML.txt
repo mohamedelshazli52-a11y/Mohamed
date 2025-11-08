@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Maze Sweets — لعبة المتاهة</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="logo">
+        <svg width="36" height="36" viewBox="0 0 24 24" aria-hidden><g fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="12" cy="11" r="3"/><path d="M12 2v2M12 20v2M4.5 5.5l1.4 1.4M18.1 18.1l1.4 1.4M2 12h2M20 12h2M4.5 18.5l1.4-1.4M18.1 5.9l1.4-1.4"/></g></svg>
+        <span>Maze Sweets</span>
+      </div>
+      <div class="hud">
+        <div>مرحلة: <strong id="level">1</strong></div>
+        <div>وقت: <strong id="time">60</strong>s</div>
+        <div>نقاط: <strong id="score">0</strong></div>
+        <div>الأعلى: <strong id="high">0</strong></div>
+      </div>
+    </header>
+
+    <main>
+      <div class="canvas-wrap">
+        <canvas id="game" aria-label="لعبة متاهة"></canvas>
+        <div class="canvas-overlay" id="overlayUI">
+          <button id="pauseBtn" class="btn small">إيقاف</button>
+        </div>
+      </div>
+
+      <div class="controls-row">
+        <div class="controls-player">
+          <h3>اللاعب 1 (W A S D)</h3>
+          <div class="touch-pad" id="pad1">
+            <button data-dir="up">▲</button>
+            <div>
+              <button data-dir="left">◀</button>
+              <button data-dir="down">▼</button>
+              <button data-dir="right">▶</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="controls-player">
+          <h3>اللاعب 2 (أسهم)</h3>
+          <div class="touch-pad" id="pad2">
+            <button data-dir="up">▲</button>
+            <div>
+              <button data-dir="left">◀</button>
+              <button data-dir="down">▼</button>
+              <button data-dir="right">▶</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="buttons">
+        <button id="restart" class="btn">إعادة</button>
+        <button id="mute" class="btn">كتم</button>
+      </div>
+
+      <div class="modal hidden" id="modal">
+        <div class="card">
+          <h2 id="modalTitle">عنوان</h2>
+          <p id="modalText">نص</p>
+          <div class="modal-actions">
+            <button id="modalNext" class="btn">التالي</button>
+            <button id="modalRestart" class="btn alt">أعد اللعبة</button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <footer>صنع بواسطة مساعدك — يمكنك تعديل الألوان والأشكال في الملف <code>style.css</code></footer>
+  </div>
+
+  <!-- أصوات بسيطة (مصادر عامة) -->
+  <audio id="sfx-goal" src="https://freesound.org/data/previews/341/341695_6241700-lq.mp3" preload="auto"></audio>
+  <audio id="sfx-step" src="https://freesound.org/data/previews/146/146725_8049-lq.mp3" preload="auto"></audio>
+  <audio id="bg-music" src="" preload="auto"></audio>
+
+  <script src="script.js"></script>
+</body>
+</html>

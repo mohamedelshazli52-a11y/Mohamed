@@ -1,0 +1,432 @@
+/* Maze Sweets — نسخة محسّنة جاهزة للنسخ
+   ميزات:
+   - خوارزمية بناء متاهة (Recursive Backtracker)
+   - رسومات Canvas محسّنة: جدران، أرضية متدرجة، هدف لامع، شخصيات مع ظل ولمعان
+   - فيزيائية تصادم بسيطة، دعم للاعبين 2 محلياً (WASD & Arrows)
+   - دعم لمس (أزرار اللمس) وواجهة نتائج/مستويات
+   - جزيئات particles عند الوصول للهدف
+   - حفظ أعلى نتيجة في localStorage
+*/
+
+/* -------- إعداد العناصر والـ DOM -------- */
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+const LEVEL_DISPLAY = document.getElementById('level');
+const TIME_DISPLAY = document.getElementById('time');
+const SCORE_DISPLAY = document.getElementById('score');
+const HIGH_DISPLAY = document.getElementById('high');
+
+const RESTART_BTN = document.getElementById('restart');
+const MUTE_BTN = document.getElementById('mute');
+const PAUSE_BTN = document.getElementById('pauseBtn');
+
+const MODAL = document.getElementById('modal');
+const MODAL_TITLE = document.getElementById('modalTitle');
+const MODAL_TEXT = document.getElementById('modalText');
+const MODAL_NEXT = document.getElementById('modalNext');
+const MODAL_RESTART = document.getElementById('modalRestart');
+
+const sfxGoal = document.getElementById('sfx-goal');
+const sfxStep = document.getElementById('sfx-step');
+
+let muted = false;
+let high = parseInt(localStorage.getItem('maze_high')) || 0;
+HIGH_DISPLAY.innerText = high;
+
+/* -------- إعداد اللعبة والمتغيرات -------- */
+let cols = 21; // odd for maze
+let rows = 15;
+let cellSize = 32;
+let maze = [];
+let players = [];
+let goal = {r:1,c:1};
+let particles = [];
+
+let level = 1;
+let timeLeft = 60;
+let score = 0;
+let running = true;
+let lastTime = performance.now();
+let keys = {};
+let touchState = {pad1: null, pad2: null};
+
+/* ------- دالة تكييف كانفاس مع الحجم ------- */
+function resizeCanvas(){
+  const wrap = canvas.parentElement;
+  const rect = wrap.getBoundingClientRect();
+  // set canvas pixel size with devicePixelRatio for crisp drawing
+  const w = Math.floor(rect.width);
+  const desiredH = Math.floor(Math.min(rect.width * 0.6, window.innerHeight * 0.62));
+  canvas.style.width = w + 'px';
+  canvas.style.height = desiredH + 'px';
+  canvas.width = Math.floor(w * devicePixelRatio);
+  canvas.height = Math.floor(desiredH * devicePixelRatio);
+  ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+  // cell size adaptively
+  cellSize = Math.floor(Math.min(w / cols, desiredH / rows));
+}
+window.addEventListener('resize', ()=> { resizeCanvas(); render(); });
+
+/* --------- خوارزمية بناء المتاهة: Recursive Backtracker --------- */
+function initMaze(){
+  if(cols %2 ===0) cols++;
+  if(rows %2 ===0) rows++;
+  maze = Array(rows).fill(0).map(()=>Array(cols).fill(1));
+  const stack = [];
+  const start = {r:1,c:1};
+  maze[start.r][start.c] = 0;
+  stack.push(start);
+
+  const dirs = [{dr:-2,dc:0},{dr:2,dc:0},{dr:0,dc:-2},{dr:0,dc:2}];
+
+  while(stack.length){
+    const cur = stack[stack.length-1];
+    const neighbors = [];
+    for(const d of dirs){
+      const nr = cur.r + d.dr, nc = cur.c + d.dc;
+      if(nr>0 && nr<rows-1 && nc>0 && nc<cols-1 && maze[nr][nc] === 1){
+        neighbors.push({r:nr,c:nc,dr:d.dr,dc:d.dc});
+      }
+    }
+    if(neighbors.length === 0){
+      stack.pop();
+    } else {
+      const pick = neighbors[Math.floor(Math.random()*neighbors.length)];
+      const wallR = cur.r + pick.dr/2;
+      const wallC = cur.c + pick.dc/2;
+      maze[wallR][wallC] = 0;
+      maze[pick.r][pick.c] = 0;
+      stack.push({r:pick.r,c:pick.c});
+    }
+  }
+}
+
+/* ------- إيجاد أقرب خلية مفتوحة ------- */
+function findOpen(sr, sc){
+  if(maze[sr] && maze[sr][sc] === 0) return {r:sr,c:sc};
+  for(let dist=1; dist<Math.max(rows,cols); dist++){
+    for(let dr=-dist; dr<=dist; dr++){
+      for(let dc=-dist; dc<=dist; dc++){
+        const r = sr+dr, c = sc+dc;
+        if(r>=0 && r<rows && c>=0 && c<cols && maze[r][c]===0) return {r,c};
+      }
+    }
+  }
+  return {r:1,c:1};
+}
+
+/* ------- إنشاء اللاعبين ------- */
+function createPlayer(cellR, cellC, color, controls){
+  return {
+    r: cellR, c: cellC,
+    x: cellC + 0.5, y: cellR + 0.5,
+    vx:0, vy:0, speed: 3.5/60, color, controls,
+    radius: 0.36, reached:false, localScore:0
+  };
+}
+
+function spawnEntities(){
+  players = [];
+  const p1 = findOpen(1,1);
+  const p2 = findOpen(rows-2, cols-2);
+  players.push(createPlayer(p1.r, p1.c, '#ff7fa3', {up:'KeyW',left:'KeyA',down:'KeyS',right:'KeyD'}));
+  players.push(createPlayer(p2.r, p2.c, '#7fd3ff', {up:'ArrowUp',left:'ArrowLeft',down:'ArrowDown',right:'ArrowRight'}));
+  goal = findOpen(Math.floor(rows/2), Math.floor(cols/2));
+}
+
+/* --------- رسم المتاهة واللعبة --------- */
+function render(){
+  // clear
+  ctx.clearRect(0,0,canvas.width, canvas.height);
+  ctx.save();
+  // draw floor pattern
+  for(let r=0;r<rows;r++){
+    for(let c=0;c<cols;c++){
+      const x = c * cellSize, y = r * cellSize;
+      if(maze[r][c] === 1){
+        // wall
+        const grd = ctx.createLinearGradient(x,y,x+cellSize,y+cellSize);
+        grd.addColorStop(0,'#2a1b1a'); grd.addColorStop(1,'#1d0f0e');
+        ctx.fillStyle = grd;
+        roundRect(ctx, x+1, y+1, cellSize-2, cellSize-2, 6);
+        ctx.fill();
+        // subtle highlight
+        ctx.strokeStyle = 'rgba(255,255,255,0.02)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      } else {
+        // floor tile
+        ctx.fillStyle = ( (r+c) % 2 ===0 ) ? 'rgba(255,248,240,0.02)' : 'rgba(255,248,240,0.00)';
+        ctx.fillRect(x,y,cellSize,cellSize);
+      }
+    }
+  }
+
+  // draw goal candy (shiny circle)
+  const gx = goal.c*cellSize + cellSize/2;
+  const gy = goal.r*cellSize + cellSize/2;
+  const gr = cellSize*0.42;
+  const radial = ctx.createRadialGradient(gx,gy,gr*0.1,gx,gy,gr);
+  radial.addColorStop(0,'#fff6b8'); radial.addColorStop(0.5,'#ffd28c'); radial.addColorStop(1,'#e08b3b');
+  ctx.beginPath();
+  ctx.fillStyle = radial;
+  ctx.arc(gx,gy,gr,0,Math.PI*2);
+  ctx.fill();
+  // stripes
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.lineWidth = Math.max(1, cellSize*0.04);
+  for(let i=-0.25;i<=0.25;i+=0.12){
+    ctx.beginPath();
+    ctx.moveTo(gx - gr*0.7, gy + gr*i);
+    ctx.lineTo(gx + gr*0.7, gy - gr*i);
+    ctx.stroke();
+  }
+
+  // draw players
+  players.forEach((p, idx)=>{
+    // shadow
+    ctx.beginPath();
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.ellipse((p.x)*cellSize, (p.y)*cellSize + cellSize*0.14, p.radius*cellSize*0.9, p.radius*cellSize*0.5, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // body
+    ctx.beginPath();
+    ctx.fillStyle = p.color;
+    ctx.arc(p.x*cellSize, p.y*cellSize, p.radius*cellSize, 0, Math.PI*2);
+    ctx.fill();
+
+    // face shine
+    ctx.beginPath();
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.arc(p.x*cellSize - cellSize*0.12, p.y*cellSize - cellSize*0.12, p.radius*cellSize*0.45, 0, Math.PI*2);
+    ctx.fill();
+
+    // label
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.font = `${Math.max(10, cellSize*0.18)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText(`P${idx+1}`, p.x*cellSize, p.y*cellSize - p.radius*cellSize - cellSize*0.08);
+  });
+
+  // draw particles (in px)
+  particles.forEach(pr=>{
+    ctx.beginPath();
+    ctx.fillStyle = pr.color;
+    ctx.globalAlpha = Math.max(0, pr.life/pr.maxLife);
+    ctx.arc(pr.x, pr.y, pr.size, 0, Math.PI*2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  });
+
+  ctx.restore();
+}
+
+/* roundRect helper */
+function roundRect(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.arcTo(x+w, y, x+w, y+h, r);
+  ctx.arcTo(x+w, y+h, x, y+h, r);
+  ctx.arcTo(x, y+h, x, y, r);
+  ctx.arcTo(x, y, x+w, y, r);
+  ctx.closePath();
+}
+
+/* ------- فيزياء بسيطة وتحديث الحالة ------- */
+function update(dt){
+  // timer
+  timeLeft -= dt;
+  if(timeLeft <= 0){
+    timeLeft = 0;
+    endLevel(false);
+  }
+  TIME_DISPLAY.innerText = Math.ceil(timeLeft);
+
+  // process players
+  players.forEach((p, idx)=>{
+    const dir = {x:0,y:0};
+    if(keys[p.controls.up]) dir.y -= 1;
+    if(keys[p.controls.down]) dir.y += 1;
+    if(keys[p.controls.left]) dir.x -= 1;
+    if(keys[p.controls.right]) dir.x += 1;
+
+    const pad = idx===0? touchState.pad1 : touchState.pad2;
+    if(pad){
+      if(pad === 'up') dir.y -= 1;
+      if(pad === 'down') dir.y += 1;
+      if(pad === 'left') dir.x -= 1;
+      if(pad === 'right') dir.x += 1;
+    }
+
+    if(dir.x !== 0 || dir.y !== 0){
+      const len = Math.hypot(dir.x, dir.y);
+      p.vx = (dir.x/len) * p.speed;
+      p.vy = (dir.y/len) * p.speed;
+      if(!muted && Math.random() < 0.06){ sfxStep.currentTime = 0; sfxStep.play().catch(()=>{}); }
+    } else { p.vx = 0; p.vy = 0; }
+
+    // integrate
+    p.x += p.vx * dt * 60;
+    p.y += p.vy * dt * 60;
+
+    // collision: check 4 corners
+    const rad = p.radius;
+    const points = [
+      {x: p.x - rad, y: p.y - rad},
+      {x: p.x + rad, y: p.y - rad},
+      {x: p.x - rad, y: p.y + rad},
+      {x: p.x + rad, y: p.y + rad}
+    ];
+    for(const pt of points){
+      const cr = Math.floor(pt.y), cc = Math.floor(pt.x);
+      if(cr < 0 || cr >= rows || cc < 0 || cc >= cols){
+        // keep inside bounds
+        p.x = Math.max(0.5, Math.min(p.x, cols-0.5));
+        p.y = Math.max(0.5, Math.min(p.y, rows-0.5));
+      } else if(maze[cr][cc] === 1){
+        // push back
+        p.x -= p.vx * dt * 60;
+        p.y -= p.vy * dt * 60;
+        p.vx = 0; p.vy = 0;
+        break;
+      }
+    }
+
+    // check goal
+    const dx = p.x - (goal.c + 0.5);
+    const dy = p.y - (goal.r + 0.5);
+    if(!p.reached && Math.hypot(dx,dy) < 0.6){
+      p.reached = true;
+      const pts = Math.max(10, Math.ceil(timeLeft) * 2);
+      score += pts;
+      p.localScore = pts;
+      SCORE_DISPLAY.innerText = score;
+      spawnParticles(18, p.x*cellSize, p.y*cellSize);
+      if(!muted){ sfxGoal.currentTime = 0; sfxGoal.play().catch(()=>{}); }
+      // if both reached -> win
+      if(players.every(pl => pl.reached)) endLevel(true);
+    }
+  });
+
+  // update particles
+  for(let i=particles.length-1;i>=0;i--){
+    const pr = particles[i];
+    pr.vy += 0.08 * dt * 60;
+    pr.x += pr.vx * dt * 60;
+    pr.y += pr.vy * dt * 60;
+    pr.life -= dt * 60;
+    if(pr.life <= 0) particles.splice(i,1);
+  }
+}
+
+/* spawn particles */
+function spawnParticles(n, x, y){
+  for(let i=0;i<n;i++){
+    particles.push({
+      x: x + (Math.random()-0.5)*20,
+      y: y + (Math.random()-0.8)*10,
+      vx: (Math.random()*2-1) * 2,
+      vy: (Math.random()*-3.5),
+      size: Math.random()*3 + 1,
+      life: Math.random()*40 + 20,
+      maxLife: Math.random()*40 + 20,
+      color: `hsl(${Math.random()*50 + 10}, 80%, ${50+Math.random()*10}%)`
+    });
+  }
+  // cap
+  if(particles.length > 120) particles.splice(0, particles.length - 120);
+}
+
+/* ------- كشف المطابقات، بداية ونهاية المستويات ------- */
+function startLevel(){
+  running = true;
+  resizeCanvas();
+  initMaze();
+  spawnEntities();
+  timeLeft = Math.max(25, 60 - (level-1)*6);
+  players.forEach(p => { p.reached = false; p.localScore = 0; });
+  SCORE_DISPLAY.innerText = score;
+  LEVEL_DISPLAY.innerText = level;
+  lastTime = performance.now();
+  requestAnimationFrame(gameLoop);
+}
+
+function endLevel(win){
+  running = false;
+  MODAL.classList.remove('hidden');
+  if(win){
+    MODAL_TITLE.innerText = 'مبروك!';
+    MODAL_TEXT.innerText = `أنهيت المرحلة ${level}. نقاط إضافية: ${players.reduce((s,p)=>s+(p.localScore||0),0)}`;
+    high = Math.max(high, score);
+    localStorage.setItem('maze_high', String(high));
+    HIGH_DISPLAY.innerText = high;
+  } else {
+    MODAL_TITLE.innerText = 'انتهى الوقت';
+    MODAL_TEXT.innerText = `لم تنهِ المرحلة ${level}. نقاطك الكلية: ${score}`;
+    high = Math.max(high, score);
+    localStorage.setItem('maze_high', String(high));
+    HIGH_DISPLAY.innerText = high;
+  }
+}
+
+/* ------- التحكمات: كيبورد ولمس ------- */
+window.addEventListener('keydown', e=>{ keys[e.code] = true; });
+window.addEventListener('keyup', e=>{ keys[e.code] = false; });
+
+document.querySelectorAll('#pad1 button').forEach(btn=>{
+  btn.addEventListener('touchstart', e=>{ e.preventDefault(); touchState.pad1 = btn.dataset.dir; });
+  btn.addEventListener('touchend', e=>{ e.preventDefault(); touchState.pad1 = null; });
+  btn.addEventListener('mousedown', e=>{ touchState.pad1 = btn.dataset.dir; });
+  btn.addEventListener('mouseup', e=>{ touchState.pad1 = null; });
+});
+document.querySelectorAll('#pad2 button').forEach(btn=>{
+  btn.addEventListener('touchstart', e=>{ e.preventDefault(); touchState.pad2 = btn.dataset.dir; });
+  btn.addEventListener('touchend', e=>{ e.preventDefault(); touchState.pad2 = null; });
+  btn.addEventListener('mousedown', e=>{ touchState.pad2 = btn.dataset.dir; });
+  btn.addEventListener('mouseup', e=>{ touchState.pad2 = null; });
+});
+
+/* أزرار واجهة */
+RESTART_BTN.addEventListener('click', ()=> {
+  level = 1; score = 0; SCORE_DISPLAY.innerText = score; startLevel();
+});
+MUTE_BTN.addEventListener('click', ()=> {
+  muted = !muted;
+  MUTE_BTN.innerText = muted ? 'تشغيل' : 'كتم';
+});
+PAUSE_BTN.addEventListener('click', ()=> {
+  running = !running;
+  PAUSE_BTN.innerText = running ? 'إيقاف' : 'استئناف';
+  if(running){ lastTime = performance.now(); requestAnimationFrame(gameLoop); }
+});
+
+MODAL_NEXT.addEventListener('click', ()=> {
+  MODAL.classList.add('hidden');
+  level++;
+  startLevel();
+});
+MODAL_RESTART.addEventListener('click', ()=> {
+  MODAL.classList.add('hidden');
+  level = 1; score = 0; startLevel();
+});
+
+/* ------- حلقة اللعبة الرئيسية (fixed-step) ------- */
+function gameLoop(now){
+  if(!running) return;
+  const dt = Math.min(0.033, (now - lastTime)/1000);
+  lastTime = now;
+  update(dt);
+  render();
+  requestAnimationFrame(gameLoop);
+}
+
+/* ------- init ------- */
+function init(){
+  resizeCanvas();
+  startLevel();
+  // autosave highscore
+  setInterval(()=> localStorage.setItem('maze_high', String(Math.max(high, score))), 2500);
+}
+init();

@@ -1,0 +1,118 @@
+:root{
+  --bg-1: #0f0b0a;
+  --panel: #1f1715;
+  --accent: #f6b26b;
+  --accent-2: #f7d06b;
+  --muted: rgba(255,255,255,0.85);
+  --card-bg: linear-gradient(180deg,#fffef8,#f7efe6);
+  --glass: rgba(255,255,255,0.03);
+}
+
+/* Reset بسيط */
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family: "Cairo", "Segoe UI", Roboto, Arial, sans-serif;
+  background: radial-gradient(1200px 600px at 10% 10%, rgba(247,208,107,0.06), transparent),
+              linear-gradient(180deg,var(--bg-1), #0b0706);
+  color:var(--muted);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:18px;
+}
+
+/* الحاوية */
+.app{
+  width:100%;
+  max-width:1100px;
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+
+/* الشريط العلوي */
+.topbar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+}
+.logo{ display:flex; align-items:center; gap:10px; font-weight:700; color:var(--accent); }
+.logo svg{ color:var(--accent); }
+.hud{ display:flex; gap:12px; align-items:center; font-size:14px; }
+.hud strong{ color:#fff; }
+
+/* الوسيط الرئيسي */
+main{ display:flex; flex-direction:column; gap:12px; align-items:center; }
+
+/* كادر الكانفاس */
+.canvas-wrap{
+  width:100%;
+  max-width:900px;
+  background: linear-gradient(180deg,#2d1f19,#1a0f0b);
+  padding:14px;
+  border-radius:16px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  position:relative;
+}
+
+/* الكانفاس نفسه */
+canvas{
+  width:100%;
+  height:540px;
+  display:block;
+  border-radius:10px;
+  background: linear-gradient(180deg,#150a08,#240f0c);
+  image-rendering: optimizeQuality;
+}
+
+/* overlay زر الإيقاف */
+.canvas-overlay{ position:absolute; top:12px; right:12px; z-index:30; }
+.btn{ background:var(--accent); color:#2b1a12; border:none; padding:8px 12px; border-radius:10px; cursor:pointer; font-weight:700; box-shadow: 0 8px 18px rgba(0,0,0,0.45); }
+.btn.small{ padding:6px 8px; font-size:13px; }
+.btn.alt{ background:transparent; border:1px solid rgba(255,255,255,0.08); color:var(--muted); }
+
+/* التحكمات اللمسية */
+.controls-row{ display:flex; gap:20px; justify-content:space-between; width:100%; flex-wrap:wrap; }
+.controls-player{ flex:1; min-width:220px; text-align:center; }
+.touch-pad{
+  display:inline-block;
+  background: var(--glass);
+  padding:8px;
+  border-radius:12px;
+  margin-top:8px;
+}
+.touch-pad button{
+  width:46px; height:46px; margin:6px; border-radius:10px;
+  border:none; font-weight:800; font-size:16px; cursor:pointer;
+  background: linear-gradient(180deg,var(--accent-2),var(--accent)); color:#2b1a12;
+  box-shadow: 0 10px 18px rgba(0,0,0,0.45);
+}
+
+/* الأزرار الرئيسية */
+.buttons{ display:flex; gap:10px; justify-content:center; margin-top:6px; }
+
+/* الفوتر */
+footer{ text-align:center; opacity:0.6; font-size:12px; margin-top:6px; }
+
+/* مودال النتيجة */
+.modal{
+  position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.5); z-index:60;
+}
+.modal.hidden{ display:none; }
+.card{
+  width:320px; padding:18px; border-radius:12px; background:var(--card-bg); color:#2b1a12;
+  box-shadow: 0 30px 80px rgba(0,0,0,0.6);
+  text-align:center;
+}
+.modal-actions{ display:flex; gap:10px; justify-content:center; margin-top:12px; }
+
+/* استجابة */
+@media (max-width:880px){
+  canvas{ height:420px; }
+  .controls-row{ flex-direction:column; align-items:center; }
+}
+@media (max-width:480px){
+  canvas{ height:320px; }
+  .hud{ display:none; }
+}
